@@ -7,18 +7,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ตั้งค่ารับไฟล์รูปภาพสลิป (เก็บไว้ใน Memory ชั่วคราวเพื่อส่งต่อให้ SlipOK)
+// ตั้งค่ารับไฟล์รูปภาพสลิปแบบเก็บเข้าหน่วยความจำชั่วคราว
 const upload = multer({ storage: multer.memoryStorage() });
 
-// 🔹 ฐานข้อมูลจำลองบน Server กลาง (เมื่อรีสตาร์ทข้อมูลจะรีเซ็ต หากต้องการเก็บถาวรในอนาคตค่อยต่อ Database ครับ)
+// 🔹 ฐานข้อมูลจำลองบน Server กลาง
 let users = [
-    { username: "sittichai328", password: "1", balance: 0 } // บัญชีแอดมิน/ทดสอบตั้งต้น
+    { username: "sittichai328", password: "1", balance: 0 } 
 ];
 
 let keys = {
-    opt1: ["FJQD-DT5W-HLVQ-SQT7", "LLU8-3EHC-1JNU-CRI4"], // สต็อกคีย์ 1 วัน
-    opt2: ["6MG1-KRZC-Z4T1-YAW8", "DB4V-B8K2-LKZV-7T9Y", "YX3K-ELQ9-6CLZ-6GYO"], // สต็อกคีย์ 7 วัน
-    opt3: ["KOU0-DYVV-WKZS-M093"] // สต็อกคีย์ถาวร
+    opt1: ["FJQD-DT5W-HLVQ-SQT7", "LLU8-3EHC-1JNU-CRI4"], 
+    opt2: ["6MG1-KRZC-Z4T1-YAW8", "DB4V-B8K2-LKZV-7T9Y", "YX3K-ELQ9-6CLZ-6GYO"], 
+    opt3: ["KOU0-DYVV-WKZS-M093"] 
 };
 
 const packageNames = { opt1: "PRO FREEFIRE - 1 วัน", opt2: "PRO FREEFIRE - 7 วัน", opt3: "PRO FREEFIRE - ถาวร" };
@@ -82,7 +82,7 @@ app.post('/api/buy', (req, res) => {
     
     // หักเงินและตัดคีย์ส่งให้ลูกค้า
     user.balance -= price;
-    const delivKey = keys[optionKey].shift(); // ดึงคีย์แรกสุดออกจากสต็อก
+    const delivKey = keys[optionKey].shift(); 
     
     if (!user.history) user.history = [];
     user.history.push({
@@ -95,7 +95,7 @@ app.post('/api/buy', (req, res) => {
 });
 
 // ==========================================
-// 🏦 TOPUP API - ระบบเช็กสลิปออโต้ (SlipOK V2 เสถียรที่สุด)
+// 🏦 TOPUP API - ระบบเช็กสลิปออโต้ (SlipOK V2 ล่าสุด)
 // ==========================================
 app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     const { username } = req.body;
@@ -112,14 +112,13 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     }
 
     try {
-        // สร้าง FormData และแนบไฟล์แบบ Buffer + ระบุรายละเอียดไฟล์ให้ถูกต้อง ป้องกันโครงสร้างพัง
-        const formData = new FormData();
-        const fileBuffer = req.file.buffer;
-        const fileBlob = new Blob([fileBuffer], { type: req.file.mimetype });
-        formData.append('files', fileBlob, req.file.originalname);
+        // ใช้ FormData และแปลงไฟล์เป็น Blob ให้เข้ากับมาตรฐานเว็บ Node.js เวอร์ชันใหม่
+        const form = new FormData();
+        const fileBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
+        form.append('files', fileBlob, req.file.originalname);
 
-        // ยิงเข้า SlipOK API v2 ตัวล่าสุด
-        const response = await axios.post('https://api.slipok.com/api/v2/detect/upload', formData, {
+        // ยิงเข้า API ของ SlipOK v2
+        const response = await axios.post('https://api.slipok.com/api/v2/detect/upload', form, {
             headers: {
                 'x-log-api-key': SLIPOK_API_KEY,
                 'Content-Type': 'multipart/form-data'
@@ -127,16 +126,15 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
         });
 
         if (response.data && response.data.success) {
-            // ดึงจำนวนเงินจริงจากสลิปโอนเงิน
             const amount = response.data.data.amount; 
-            user.balance += amount; // บวกเงินให้ลูกค้าในระบบทันที
+            user.balance += amount; // เพิ่มเงินเข้ากระเป๋าบัญชีลูกค้าในระบบ
             return res.json({ success: true, amount: amount });
         } else {
             return res.status(400).json({ success: false, message: response.data.message || "สลิปไม่ถูกต้อง หรือถูกใช้ไปแล้ว" });
         }
     } catch (error) {
         console.error("SlipOK Error Detail:", error.response ? error.response.data : error.message);
-        res.status(500).json({ success: false, message: "เซิร์ฟเวอร์สแกนสลิปขัดข้อง ตรวจสอบเงินคงเหลือในเว็บ SlipOK หรือ Key บน Render" });
+        res.status(500).json({ success: false, message: "สแกนสลิปขัดข้อง ตรวจสอบเงินคงเหลือในเว็บ SlipOK หรือตั้งค่า Key บน Render" });
     }
 });
 
@@ -145,7 +143,7 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
 // 🛠️ ADMIN API - ระบบควบคุมหลังบ้าน (สำหรับหน้า admin.html)
 // ==========================================
 
-// 1. เส้นทางดึงรายชื่อลูกค้าทั้งหมดไปแสดงในตารางแอดมิน
+// 1. ดึงรายชื่อผู้ใช้ทั้งหมด
 app.get('/api/admin/users', (req, res) => {
     try {
         res.json(users); 
@@ -154,7 +152,7 @@ app.get('/api/admin/users', (req, res) => {
     }
 });
 
-// 2. เส้นทางดึงคีย์รอขายทั้งหมดในระบบไปโชว์ในหน้าจัดการคีย์
+// 2. ดึงคีย์ทั้งหมดในสต็อก
 app.get('/api/admin/keys', (req, res) => {
     try {
         res.json(keys);
@@ -163,7 +161,7 @@ app.get('/api/admin/keys', (req, res) => {
     }
 });
 
-// 3. เส้นทางแก้ไขและปรับเงินในบัญชีลูกค้าจากหน้าเว็บแอดมิน
+// 3. แก้ไข/ปรับยอดเงินลูกค้า
 app.post('/api/admin/update-balance', (req, res) => {
     const { username, newBalance } = req.body;
     const user = users.find(u => u.username === username);
@@ -175,7 +173,7 @@ app.post('/api/admin/update-balance', (req, res) => {
     }
 });
 
-// 4. เส้นทางแอดมินพิมพ์เพิ่มคีย์ใหม่เข้าระบบสต็อก
+// 4. เพิ่มคีย์เข้าสต็อก
 app.post('/api/admin/add-key', (req, res) => {
     const { optionKey, keyText } = req.body;
     if (keys[optionKey]) {
@@ -186,7 +184,7 @@ app.post('/api/admin/add-key', (req, res) => {
     }
 });
 
-// 5. เส้นทางแอดมินกดคลิกลบคีย์รายตัวออกจากระบบสต็อก
+// 5. ลบคีย์ออกจากสต็อก
 app.post('/api/admin/delete-key', (req, res) => {
     const { optionKey, index } = req.body;
     if (keys[optionKey] && keys[optionKey][index] !== undefined) {
@@ -197,8 +195,7 @@ app.post('/api/admin/delete-key', (req, res) => {
     }
 });
 
-
-// 🚨 เริ่มต้นรันพอร์ตเซิร์ฟเวอร์
+// เริ่มต้นรันพอร์ตเซิร์ฟเวอร์
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
