@@ -5,11 +5,9 @@ const multer = require('multer');
 
 const app = express();
 
-// ตั้งค่า Middleware หลัก
 app.use(cors());
 app.use(express.json());
 
-// ตั้งค่าสำหรับรับรูปภาพสลิปผ่านหน่วยความจำ (Memory Storage)
 const upload = multer({ storage: multer.memoryStorage() });
 
 // 💾 ฐานข้อมูลจำลองบน Server
@@ -24,21 +22,20 @@ const SLIPOK_API_KEY = "SLIPOKPQPZ45";
 const productPrices = { opt1: 10, opt2: 50, opt3: 199 };
 const productNames = { opt1: "PRO FREEFIRE - 1 วัน", opt2: "PRO FREEFIRE - 7 วัน", opt3: "PRO FREEFIRE - ถาวร" };
 
-// 📌 หน้าแรกของเซิร์ฟเวอร์ เอาไว้เช็กสถานะรัน
 app.get('/', (req, res) => {
     res.send('🚀 THREE SHOP BACKEND IS RUNNING SUCCESSFULLY!');
 });
 
-// 📌 API 1: ดึงจำนวนสต็อกคีย์ทั้งหมด
+// 📌 API 1: ดึงสต็อก
 app.get('/api/stock', (req, res) => {
     res.json({
-        opt1: keyDatabase.opt1.length,
-        opt2: keyDatabase.opt2.length,
-        opt3: keyDatabase.opt3.length
+        opt1: keyDatabase.opt1 ? keyDatabase.opt1.length : 0,
+        opt2: keyDatabase.opt2 ? keyDatabase.opt2.length : 0,
+        opt3: keyDatabase.opt3 ? keyDatabase.opt3.length : 0
     });
 });
 
-// 📌 API 2: สมัครสมาชิกใหม่
+// 📌 API 2: สมัครสมาชิก
 app.post('/api/register', (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ message: 'กรุณากรอกข้อมูลให้ครบถ้วน' });
@@ -58,14 +55,14 @@ app.post('/api/login', (req, res) => {
     }
 });
 
-// 📌 API 4: ดึงประวัติการซื้อและยอดเงินล่าสุด
+// 📌 API 4: ดึงข้อมูลยูสเซอร์
 app.get('/api/user/:username', (req, res) => {
     const user = usersData[req.params.username];
     if (!user) return res.status(404).json({ message: 'ไม่พบผู้ใช้งาน' });
     res.json({ balance: user.balance, history: user.history });
 });
 
-// 📌 API 5: ระบบสั่งซื้อสินค้า
+// 📌 API 5: สั่งซื้อสินค้า
 app.post('/api/buy', (req, res) => {
     const { username, optionKey } = req.body;
     const user = usersData[username];
@@ -85,14 +82,13 @@ app.post('/api/buy', (req, res) => {
     res.json({ success: true, key: releasedKey, balance: user.balance });
 });
 
-// 📌 API 6: ตรวจสอบสลิปโอนเงินผ่านเซิร์ฟเวอร์โดยตรง
+// 📌 API 6: ตรวจสอบสลิป (แก้ไขชื่อฟิลด์เป็น 'slip' ให้ตรงหน้าเว็บ)
 app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     const { username } = req.body;
-    if (!username || !usersData[username]) return res.status(400).json({ message: 'ไม่พบชื่อผู้ใช้งานนี้ในระบบหลังบ้าน' });
+    if (!username || !usersData[username]) return res.status(400).json({ message: 'ไม่พบชื่อผู้ใช้งานในระบบ' });
     if (!req.file) return res.status(400).json({ message: 'ไม่พบไฟล์รูปภาพสลิป' });
 
     try {
-        // ใช้ตัวแปลงฟอร์มแบบสร้างเอง เพื่อส่ง Binary ไปยัง SlipOK ได้อย่างแม่นยำ 100%
         const form = new roundedFormData();
         form.append('files', req.file.buffer, req.file.originalname, req.file.mimetype);
 
@@ -118,7 +114,7 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     }
 });
 
-// 📌 API 7: หน้าแดชบอร์ดแอดมินสำหรับเช็กข้อมูลผู้ใช้และคีย์ (ซ่อมแซมส่วนที่ขาดหาย)
+// 📌 API 7: แดชบอร์ดแอดมิน
 app.get('/api/admin/dashboard', (req, res) => {
     res.json({ 
         total_users: Object.keys(usersData).length, 
@@ -127,30 +123,16 @@ app.get('/api/admin/dashboard', (req, res) => {
     });
 });
 
-// 🛠️ ตัวช่วยสร้างฟอร์มสำหรับส่งรูปภาพสลิปโดยไม่ต้องลง Lib นอกเพิ่ม
 function roundedFormData() {
     const boundary = `----NodeBoundary${Math.random().toString(16).substring(2)}`;
     const chunks = [];
-    
     this.append = function(name, buffer, filename, mimeType) {
-        let header = `--${boundary}\r\n`;
-        header += `Content-Disposition: form-data; name="${name}"; filename="${filename}"\r\n`;
-        header += `Content-Type: ${mimeType}\r\n\r\n`;
-        chunks.push(Buffer.from(header));
-        chunks.push(buffer);
-        chunks.push(Buffer.from('\r\n'));
+        let header = `--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="${filename}"\r\nContent-Type: ${mimeType}\r\n\r\n`;
+        chunks.push(Buffer.from(header)); chunks.push(buffer); chunks.push(Buffer.from('\r\n'));
     };
-    
-    this.getBuffer = function() {
-        chunks.push(Buffer.from(`--${boundary}--\r\n`));
-        return Buffer.concat(chunks);
-    };
-    
-    this.getHeaders = function() {
-        return { 'Content-Type': `multipart/form-data; boundary=${boundary}` };
-    };
+    this.getBuffer = function() { chunks.push(Buffer.from(`--${boundary}--\r\n`)); return Buffer.concat(chunks); };
+    this.getHeaders = function() { return { 'Content-Type': `multipart/form-data; boundary=${boundary}` }; };
 }
 
-// ตั้งค่า Port สำหรับรันบน Render อัตโนมัติ
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
