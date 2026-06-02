@@ -95,7 +95,7 @@ app.post('/api/buy', (req, res) => {
 });
 
 // ==========================================
-// 🏦 TOPUP API - ระบบเช็กสลิปออโต้ (SlipOK)
+// 🏦 TOPUP API - ระบบเช็กสลิปออโต้ (SlipOK V2 เสถียรที่สุด)
 // ==========================================
 app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     const { username } = req.body;
@@ -104,15 +104,22 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     if (!user) return res.status(404).json({ success: false, message: "ไม่พบชื่อผู้ใช้งานในระบบ" });
     if (!req.file) return res.status(400).json({ success: false, message: "ไม่พบไฟล์รูปภาพสลิปที่ส่งมา" });
 
+    const SLIPOK_API_KEY = process.env.SLIPOK_KEY; 
+
+    if (!SLIPOK_API_KEY) {
+        console.error("⚠️ แอดมินยังไม่ได้ตั้งค่า SLIPOK_KEY บน Render Environment ครับ");
+        return res.status(500).json({ success: false, message: "ระบบตรวจสลิปยังไม่ได้ตั้งค่าคีย์ความปลอดภัยจากเจ้าของร้าน" });
+    }
+
     try {
-        // 🚨 ตรงนี้ให้พี่นำ "API KEY หลังบ้าน" จากเว็บ SlipOK มาใส่แทนคำว่า 'YOUR_SLIPOK_API_KEY' นะครับ
-        const SLIPOK_API_KEY = 'YOUR_SLIPOK_API_KEY'; 
-
+        // สร้าง FormData และแนบไฟล์แบบ Buffer + ระบุรายละเอียดไฟล์ให้ถูกต้อง ป้องกันโครงสร้างพัง
         const formData = new FormData();
-        const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
-        formData.append('files', blob, req.file.originalname);
+        const fileBuffer = req.file.buffer;
+        const fileBlob = new Blob([fileBuffer], { type: req.file.mimetype });
+        formData.append('files', fileBlob, req.file.originalname);
 
-        const response = await axios.post('https://api.slipok.com/api/v1/detect', formData, {
+        // ยิงเข้า SlipOK API v2 ตัวล่าสุด
+        const response = await axios.post('https://api.slipok.com/api/v2/detect/upload', formData, {
             headers: {
                 'x-log-api-key': SLIPOK_API_KEY,
                 'Content-Type': 'multipart/form-data'
@@ -120,15 +127,16 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
         });
 
         if (response.data && response.data.success) {
-            const amount = response.data.data.amount; // ดึงจำนวนเงินจริงจากสลิป
-            user.balance += amount; // เพิ่มเงินเข้าบัญชีลูกค้าออโต้
+            // ดึงจำนวนเงินจริงจากสลิปโอนเงิน
+            const amount = response.data.data.amount; 
+            user.balance += amount; // บวกเงินให้ลูกค้าในระบบทันที
             return res.json({ success: true, amount: amount });
         } else {
             return res.status(400).json({ success: false, message: response.data.message || "สลิปไม่ถูกต้อง หรือถูกใช้ไปแล้ว" });
         }
     } catch (error) {
-        console.error("SlipOK Error:", error.response ? error.response.data : error.message);
-        res.status(500).json({ success: false, message: "ระบบตรวจสลิปขัดข้องชั่วคราว" });
+        console.error("SlipOK Error Detail:", error.response ? error.response.data : error.message);
+        res.status(500).json({ success: false, message: "เซิร์ฟเวอร์สแกนสลิปขัดข้อง ตรวจสอบเงินคงเหลือในเว็บ SlipOK หรือ Key บน Render" });
     }
 });
 
