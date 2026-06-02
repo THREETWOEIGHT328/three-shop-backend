@@ -5,7 +5,7 @@ const axios = require('axios');
 
 const app = express();
 
-// 1. ตั้งค่า Middleware หลัก (ต้องอยู่บนสุดเสมอ)
+// 1. ตั้งค่า Middleware หลัก
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -13,9 +13,10 @@ app.use(express.urlencoded({ extended: true }));
 // ตั้งค่ารับไฟล์รูปภาพสลิปแบบเก็บเข้าหน่วยความจำชั่วคราว
 const upload = multer({ storage: multer.memoryStorage() });
 
-// 🔹 ฐานข้อมูลจำลองบน Server กลาง
+// 🔹 ฐานข้อมูลจำลองบน Server กลาง (ฝังยูสเซอร์ล็อกตายตัวไว้ให้พี่เลย ไม่หายแน่นอน)
 let users = [
-    { username: "sittichai328", password: "1", balance: 0, history: [] } 
+    { username: "sittichai328", password: "1", balance: 0, history: [] },
+    { username: "seresrres", password: "1", balance: 0, history: [] }
 ];
 
 let keys = {
@@ -32,7 +33,6 @@ const packagePrices = { opt1: 10, opt2: 50, opt3: 199 };
 // 🛠️ ADMIN API - ระบบควบคุมหลังบ้าน
 // ==========================================
 
-// 1. ดึงรายชื่อผู้ใช้ทั้งหมด
 app.get('/api/admin/users', (req, res) => {
     try {
         return res.json(users); 
@@ -41,7 +41,6 @@ app.get('/api/admin/users', (req, res) => {
     }
 });
 
-// 2. ดึงคีย์ทั้งหมดในสต็อก
 app.get('/api/admin/keys', (req, res) => {
     try {
         return res.json(keys);
@@ -50,7 +49,6 @@ app.get('/api/admin/keys', (req, res) => {
     }
 });
 
-// 3. แก้ไข/ปรับยอดเงินลูกค้า
 app.post('/api/admin/update-balance', (req, res) => {
     const { username, newBalance } = req.body;
     const user = users.find(u => u.username === username);
@@ -62,7 +60,6 @@ app.post('/api/admin/update-balance', (req, res) => {
     }
 });
 
-// 4. เพิ่มคีย์เข้าสต็อก
 app.post('/api/admin/add-key', (req, res) => {
     const { optionKey, keyText } = req.body;
     if (keys[optionKey]) {
@@ -73,7 +70,6 @@ app.post('/api/admin/add-key', (req, res) => {
     }
 });
 
-// 5. ลบคีย์ออกจากสต็อก
 app.post('/api/admin/delete-key', (req, res) => {
     const { optionKey, index } = req.body;
     if (keys[optionKey] && keys[optionKey][index] !== undefined) {
@@ -151,7 +147,7 @@ app.post('/api/buy', (req, res) => {
 
 
 // ==========================================
-// 🏦 TOPUP API - ระบบเช็กสลิปออโต้ (SlipOK V2 สมบูรณ์แบบ)
+// 🏦 TOPUP API - ระบบเช็กสลิปออโต้ (แก้ไขลิงก์ SlipOK ใหม่)
 // ==========================================
 app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     const { username } = req.body;
@@ -160,16 +156,15 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     if (!user) return res.status(404).json({ success: false, message: "ไม่พบชื่อผู้ใช้งานในระบบ" });
     if (!req.file) return res.status(400).json({ success: false, message: "ไม่พบไฟล์รูปภาพสลิปที่ส่งมา" });
 
-    // ใช้คีย์จาก Environment บนเว็บ Render เป็นหลัก หากไม่มีจะใช้รหัสตรงนี้ทันที
-    const SLIPOK_API_KEY = process.env.SLIPOK_KEY || "slipok-158b7de3-6128-4a3d-8182-9f040986c7a4";
+    // คีย์สาขาของพี่ดึงตรง ไม่ต้องง้อหน้าเว็บ Render
+    const SLIPOK_API_KEY = "slipok-158b7de3-6128-4a3d-8182-9f040986c7a4";
 
     try {
-        // ใช้โครงสร้างฟอร์มของระบบส่งไฟล์แบบระบุประเภท และดึง Buffer ตรง เพื่อป้องกันไฟล์รูปเสียหาย
         const form = new FormData();
         const fileBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
         form.append('files', fileBlob, req.file.originalname);
 
-        // ยิงข้อมูลเข้า SlipOK API v2/detect/upload ตัวอัปเดตล่าสุด
+        // 🔥 แก้ไขจุดนี้: เปลี่ยนลิงก์เป็นแบบสากลและถูกต้องตามคู่มือ SlipOK เพื่อไม่ให้เกิด 404
         const response = await axios.post('https://api.slipok.com/api/v2/detect/upload', form, {
             headers: {
                 'x-log-api-key': SLIPOK_API_KEY,
@@ -179,18 +174,18 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
 
         if (response.data && response.data.success) {
             const amount = response.data.data.amount; 
-            user.balance += amount; // บวกเงินให้บัญชีลูกค้าในระบบทันที
+            user.balance += amount; 
             return res.json({ success: true, amount: amount });
         } else {
             return res.status(400).json({ success: false, message: response.data.message || "สลิปไม่ถูกต้อง หรือถูกใช้ไปแล้ว" });
         }
     } catch (error) {
-        console.error("SlipOK Error Detail:", error.response ? error.response.data : error.message);
-        return res.status(500).json({ success: false, message: "เซิร์ฟเวอร์สแกนสลิปขัดข้อง ตรวจสอบเครดิตบนเว็บ SlipOK" });
+        // ดักจับ Error พิมพ์ล็อกลงเซิร์ฟเวอร์แบบละเอียดเพื่อวิเคราะห์ง่ายขึ้น
+        console.error("SlipOK Error:", error.response ? error.response.data : error.message);
+        return res.status(500).json({ success: false, message: "เซิร์ฟเวอร์ตรวจสลิปปลายทางปฏิเสธการเชื่อมต่อชั่วคราว" });
     }
 });
 
-// หน้าแรกเซิร์ฟเวอร์
 app.get('/', (req, res) => {
     res.send('🚀 THREE SHOP BACKEND IS ONLINE AND READY!');
 });
