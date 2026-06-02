@@ -85,20 +85,20 @@ app.post('/api/buy', (req, res) => {
     res.json({ success: true, key: releasedKey, balance: user.balance });
 });
 
-// 📌 API 6: ตรวจสอบสลิปโอนเงินผ่านเซิร์ฟเวอร์โดยตรง (แก้ไขให้ส่งข้อมูลรูปแบบ Blob ป้องกันโมดูลพัง)
+// 📌 API 6: ตรวจสอบสลิปโอนเงินผ่านเซิร์ฟเวอร์โดยตรง
 app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     const { username } = req.body;
     if (!username || !usersData[username]) return res.status(400).json({ message: 'ไม่พบชื่อผู้ใช้งานนี้ในระบบหลังบ้าน' });
     if (!req.file) return res.status(400).json({ message: 'ไม่พบไฟล์รูปภาพสลิป' });
 
     try {
-        // ใช้ FormData ที่มากับตัว NodeJS โดยตรง เพื่อลดการพึ่งพาโมดูลภายนอกที่ทำให้พัง
-        const formData = new FormData();
-        const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
-        formData.append('files', blob, req.file.originalname);
+        // ใช้ตัวแปลงฟอร์มแบบสร้างเอง เพื่อส่ง Binary ไปยัง SlipOK ได้อย่างแม่นยำ 100%
+        const form = new roundedFormData();
+        form.append('files', req.file.buffer, req.file.originalname, req.file.mimetype);
 
-        const response = await axios.post('https://api.slipok.com/api/v1/verify', formData, {
+        const response = await axios.post('https://api.slipok.com/api/v1/verify', form.getBuffer(), {
             headers: {
+                ...form.getHeaders(),
                 'x-api-key': SLIPOK_API_KEY
             }
         });
@@ -118,6 +118,39 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     }
 });
 
-// 📌 API 7: หน้าแดชบอร์ดแอดมินสำหรับเช็กข้อมูลผู้ใช้และคีย์
+// 📌 API 7: หน้าแดชบอร์ดแอดมินสำหรับเช็กข้อมูลผู้ใช้และคีย์ (ซ่อมแซมส่วนที่ขาดหาย)
 app.get('/api/admin/dashboard', (req, res) => {
-    res.json({ total_users:
+    res.json({ 
+        total_users: Object.keys(usersData).length, 
+        users: usersData, 
+        current_stock: keyDatabase 
+    });
+});
+
+// 🛠️ ตัวช่วยสร้างฟอร์มสำหรับส่งรูปภาพสลิปโดยไม่ต้องลง Lib นอกเพิ่ม
+function roundedFormData() {
+    const boundary = `----NodeBoundary${Math.random().toString(16).substring(2)}`;
+    const chunks = [];
+    
+    this.append = function(name, buffer, filename, mimeType) {
+        let header = `--${boundary}\r\n`;
+        header += `Content-Disposition: form-data; name="${name}"; filename="${filename}"\r\n`;
+        header += `Content-Type: ${mimeType}\r\n\r\n`;
+        chunks.push(Buffer.from(header));
+        chunks.push(buffer);
+        chunks.push(Buffer.from('\r\n'));
+    };
+    
+    this.getBuffer = function() {
+        chunks.push(Buffer.from(`--${boundary}--\r\n`));
+        return Buffer.concat(chunks);
+    };
+    
+    this.getHeaders = function() {
+        return { 'Content-Type': `multipart/form-data; boundary=${boundary}` };
+    };
+}
+
+// ตั้งค่า Port สำหรับรันบน Render อัตโนมัติ
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
