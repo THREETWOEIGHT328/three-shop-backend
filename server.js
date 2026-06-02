@@ -5,7 +5,7 @@ const axios = require('axios');
 
 const app = express();
 
-// 1. ตั้งค่า Middleware หลัก (ต้องอยู่บนสุดเสมอเพื่อให้อ่านข้อมูลหน้าบ้านได้)
+// 1. ตั้งค่า Middleware หลัก (ต้องอยู่บนสุดเสมอ)
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -13,7 +13,7 @@ app.use(express.urlencoded({ extended: true }));
 // ตั้งค่ารับไฟล์รูปภาพสลิปแบบเก็บเข้าหน่วยความจำชั่วคราว
 const upload = multer({ storage: multer.memoryStorage() });
 
-// 🔹 ฐานข้อมูลจำลองบน Server กลาง (ผูกข้อมูลเริ่มต้นตรงตามหน้าเว็บพี่)
+// 🔹 ฐานข้อมูลจำลองบน Server กลาง
 let users = [
     { username: "sittichai328", password: "1", balance: 0, history: [] } 
 ];
@@ -29,10 +29,10 @@ const packagePrices = { opt1: 10, opt2: 50, opt3: 199 };
 
 
 // ==========================================
-// 🛠️ ADMIN API - ระบบควบคุมหลังบ้าน (จัดตำแหน่งให้อยู่ด้านบนสุดป้องกัน Route เอ๋อ)
+// 🛠️ ADMIN API - ระบบควบคุมหลังบ้าน
 // ==========================================
 
-// 1. ดึงรายชื่อผู้ใช้ทั้งหมดไปแสดงในตารางแอดมิน
+// 1. ดึงรายชื่อผู้ใช้ทั้งหมด
 app.get('/api/admin/users', (req, res) => {
     try {
         return res.json(users); 
@@ -41,7 +41,7 @@ app.get('/api/admin/users', (req, res) => {
     }
 });
 
-// 2. ดึงคีย์ทั้งหมดในสต็อกไปโชว์ในหน้าจัดการคีย์
+// 2. ดึงคีย์ทั้งหมดในสต็อก
 app.get('/api/admin/keys', (req, res) => {
     try {
         return res.json(keys);
@@ -50,7 +50,7 @@ app.get('/api/admin/keys', (req, res) => {
     }
 });
 
-// 3. แก้ไข/ปรับยอดเงินลูกค้าจากหน้าเว็บแอดมิน
+// 3. แก้ไข/ปรับยอดเงินลูกค้า
 app.post('/api/admin/update-balance', (req, res) => {
     const { username, newBalance } = req.body;
     const user = users.find(u => u.username === username);
@@ -89,7 +89,6 @@ app.post('/api/admin/delete-key', (req, res) => {
 // 🌐 SYSTEM API - ระบบหน้าบ้านหลัก สำหรับลูกค้า
 // ==========================================
 
-// เช็กจำนวนสต็อกสินค้าหน้าแรก
 app.get('/api/stock', (req, res) => {
     return res.json({
         opt1: keys.opt1.length,
@@ -98,7 +97,6 @@ app.get('/api/stock', (req, res) => {
     });
 });
 
-// ดึงข้อมูลโปรไฟล์ผู้ใช้งานและประวัติการซื้อ
 app.get('/api/user/:username', (req, res) => {
     const user = users.find(u => u.username === req.params.username);
     if (!user) return res.status(404).json({ message: "ไม่พบผู้ใช้งาน" });
@@ -109,7 +107,6 @@ app.get('/api/user/:username', (req, res) => {
     });
 });
 
-// สมัครสมาชิกใหม่
 app.post('/api/register', (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ message: "กรอกข้อมูลไม่ครบ" });
@@ -122,7 +119,6 @@ app.post('/api/register', (req, res) => {
     return res.json({ message: "🎉 สมัครสมาชิกสำเร็จเรียบร้อยครับ!" });
 });
 
-// เข้าสู่ระบบ
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
     const user = users.find(u => u.username === username && u.password === password);
@@ -130,7 +126,6 @@ app.post('/api/login', (req, res) => {
     return res.json({ message: "เข้าสู่ระบบสำเร็จ", username: user.username });
 });
 
-// ซื้อสินค้าและตัดคีย์ออกจากสต็อก
 app.post('/api/buy', (req, res) => {
     const { username, optionKey } = req.body;
     const user = users.find(u => u.username === username);
@@ -141,7 +136,6 @@ app.post('/api/buy', (req, res) => {
     const price = packagePrices[optionKey];
     if (user.balance < price) return res.status(400).json({ message: "❌ ยอดเงินคงเหลือของพี่ไม่พอครับ กรุณาเติมเงินก่อน" });
     
-    // หักเงินและตัดคีย์ส่งให้ลูกค้า
     user.balance -= price;
     const delivKey = keys[optionKey].shift(); 
     
@@ -157,7 +151,7 @@ app.post('/api/buy', (req, res) => {
 
 
 // ==========================================
-// 🏦 TOPUP API - ระบบเช็กสลิปออโต้ (SlipOK V2 ป้องกันการขัดข้อง)
+// 🏦 TOPUP API - ระบบเช็กสลิปออโต้ (SlipOK V2 สมบูรณ์แบบ)
 // ==========================================
 app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     const { username } = req.body;
@@ -166,18 +160,16 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     if (!user) return res.status(404).json({ success: false, message: "ไม่พบชื่อผู้ใช้งานในระบบ" });
     if (!req.file) return res.status(400).json({ success: false, message: "ไม่พบไฟล์รูปภาพสลิปที่ส่งมา" });
 
-    const SLIPOK_API_KEY = process.env.SLIPOK_KEY;
-
-    if (!SLIPOK_API_KEY) {
-        console.error("⚠️ ระบบตรวจไม่พบรหัส SLIPOK_KEY บนสภาพแวดล้อม Render");
-        return res.status(500).json({ success: false, message: "ระบบตรวจสลิปยังไม่ได้ตั้งค่าคีย์ความปลอดภัยจากแอดมินหลังบ้าน" });
-    }
+    // ใช้คีย์จาก Environment บนเว็บ Render เป็นหลัก หากไม่มีจะใช้รหัสตรงนี้ทันที
+    const SLIPOK_API_KEY = process.env.SLIPOK_KEY || "slipok-158b7de3-6128-4a3d-8182-9f040986c7a4";
 
     try {
+        // ใช้โครงสร้างฟอร์มของระบบส่งไฟล์แบบระบุประเภท และดึง Buffer ตรง เพื่อป้องกันไฟล์รูปเสียหาย
         const form = new FormData();
         const fileBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
         form.append('files', fileBlob, req.file.originalname);
 
+        // ยิงข้อมูลเข้า SlipOK API v2/detect/upload ตัวอัปเดตล่าสุด
         const response = await axios.post('https://api.slipok.com/api/v2/detect/upload', form, {
             headers: {
                 'x-log-api-key': SLIPOK_API_KEY,
@@ -187,7 +179,7 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
 
         if (response.data && response.data.success) {
             const amount = response.data.data.amount; 
-            user.balance += amount; 
+            user.balance += amount; // บวกเงินให้บัญชีลูกค้าในระบบทันที
             return res.json({ success: true, amount: amount });
         } else {
             return res.status(400).json({ success: false, message: response.data.message || "สลิปไม่ถูกต้อง หรือถูกใช้ไปแล้ว" });
@@ -198,13 +190,11 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     }
 });
 
-// หน้าแรกป้องกัน Error หน้าเว็บเปล่า
+// หน้าแรกเซิร์ฟเวอร์
 app.get('/', (req, res) => {
     res.send('🚀 THREE SHOP BACKEND IS ONLINE AND READY!');
 });
 
-
-// 🚨 เริ่มต้นรันพอร์ตเซิร์ฟเวอร์
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
