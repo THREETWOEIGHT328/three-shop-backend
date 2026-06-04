@@ -4,9 +4,9 @@ const axios = require('axios');
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); // สำคัญมาก: เพื่อให้ระบบเปิดรับค่า JSON จากโปรแกรม Python ได้
 
-// 💾 ฐานข้อมูลจำลองบน Server (ถ้า Server รีสตาร์ทข้อมูลจะรีเซ็ต แนะนำให้ไปผูกฐานข้อมูลจริงในอนาคต)
+// 💾 ฐานข้อมูลจำลองบน Server
 let usersData = {};
 let keyDatabase = {
     opt1: ["FJQD-DT5W-HLVQ-SQT7", "6MG1-KRZC-Z4T1-YAW8"],
@@ -14,39 +14,36 @@ let keyDatabase = {
     opt3: ["KOUO-DYVV-WZKS-MO93"]
 };
 
-const SLIPOK_API_KEY = "SLIPOKPQPZ45"; // API Key ของพี่
+const SLIPOK_API_KEY = "SLIPOKPQPZ45"; 
 const productPrices = { opt1: 10, opt2: 50, opt3: 199 };
 const productNames = { opt1: "PRO FREEFIRE - 1 วัน", opt2: "PRO FREEFIRE - 7 วัน", opt3: "PRO FREEFIRE - ถาวร" };
 
-// 📌 API เพิ่มเติม: สำหรับให้โปรแกรมหน้าจอ CMD (main.py) ยิงมาตรวจคีย์ผ่าน Render
+// 🛠️ 📌 เพิ่มจุดนี้เพื่อแก้บั๊ก: ประตูตรวจสอบคีย์ล็อกอินสำหรับหน้าจอ Python
 app.post('/check', (req, res) => {
-    const { key } = req.body; // รับค่าคีย์จากหน้าจอ CMD
+    const { key } = req.body;
     
     if (!key) {
-        return res.status(400).json({ status: "error", message: "กรุณากรอกคีย์" });
+        return res.status(400).json({ status: "error", message: "Missing key" });
     }
 
-    console.log(`[CMD Auth Check] มีการรันสิทธิ์ตรวจสอบคีย์เข้ามา: ${key}`);
-
-    // ค้นหาคีย์ในทุกๆ Options (opt1, opt2, opt3) ว่ามีคีย์นี้อยู่จริงไหม
-    let isKeyFound = false;
-    for (const option in keyDatabase) {
-        if (keyDatabase[option].includes(key)) {
-            isKeyFound = true;
+    // ทำการวนลูปค้นหาคีย์ในฐานข้อมูลทุกหมวดหมู่ (opt1, opt2, opt3)
+    let isKeyValid = false;
+    for (const opt in keyDatabase) {
+        if (keyDatabase[opt].includes(key)) {
+            isKeyValid = true;
             break;
         }
     }
 
-    if (isKeyFound) {
-        console.log(`[CMD Auth Success] คีย์ถูกต้อง ยินดีต้อนรับ!`);
-        return res.status(200).json({ status: "success", message: "Key Validated Successfully" });
+    if (isKeyValid) {
+        // ตอบกลับแบบโครงสร้าง JSON เพื่อไม่ให้ Python เกิดข้อผิดพลาดตอนแกะค่า
+        return res.status(200).json({ status: "success", message: "Key Validated" });
     } else {
-        console.log(`[CMD Auth Failed] คีย์ไม่ตรงกับระบบหลังบ้าน`);
-        return res.status(401).json({ status: "error", message: "Invalid License Key" });
+        return res.status(401).json({ status: "error", message: "Invalid Key" });
     }
 });
 
-// 📌 API 1: ดึงจำนวนสต็อกคีย์ทั้งหมด (ส่งไปแสดงที่หน้าบ้านเหมือนกันทุกคน)
+// 📌 API 1: ดึงจำนวนสต็อกคีย์ทั้งหมด
 app.get('/api/stock', (req, res) => {
     res.json({
         opt1: keyDatabase.opt1.length,
@@ -55,11 +52,10 @@ app.get('/api/stock', (req, res) => {
     });
 });
 
-// 📌 API 2: สมัครสมาชิกใหม่ (บันทึกข้อมูลเข้าฐานข้อมูลกลาง)
+// 📌 API 2: สมัครสมาชิกใหม่
 app.post('/api/register', (req, res) => {
     const { username, password } = req.body;
     if (usersData[username]) return res.status(400).json({ message: 'ชื่อผู้ใช้นี้ถูกใช้ไปแล้วในระบบ' });
-    
     usersData[username] = { password, balance: 0, history: [] };
     res.json({ success: true, message: 'สมัครสมาชิกสำเร็จ' });
 });
@@ -81,7 +77,7 @@ app.get('/api/user/:username', (req, res) => {
     res.json({ balance: user.balance, history: user.history });
 });
 
-// 📌 API 5: ระบบสั่งซื้อสินค้า (ตัดเงินจากฐานข้อมูลส่วนกลาง)
+// 📌 API 5: ระบบสั่งซื้อสินค้า
 app.post('/api/buy', (req, res) => {
     const { username, optionKey } = req.body;
     const user = usersData[username];
@@ -101,7 +97,7 @@ app.post('/api/buy', (req, res) => {
     res.json({ success: true, key: releasedKey, balance: user.balance });
 });
 
-// 📌 API 6: ตรวจสอบสลิปโอนเงินผ่านเซิร์ฟเวอร์โดยตรง (แก้ปัญหาเรื่องรหัสไม่เด้งและแก้ CORS ทันที)
+// 📌 API 6: ตรวจสอบสลิปโอนเงินผ่านเซิร์ฟเวอร์
 const multer = require('multer');
 const upload = multer();
 const FormData = require('form-data');
@@ -123,7 +119,7 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
 
         if (response.data && (response.data.success || response.data.status === "success")) {
             const amount = response.data.data.amount;
-            usersData[username].balance += Number(amount); // เพิ่มเงินเข้าบัญชีกลาง
+            usersData[username].balance += Number(amount);
             return res.json({ success: true, amount: amount, balance: usersData[username].balance });
         }
         res.status(400).json({ message: response.data.message || 'สลิปไม่ถูกต้อง' });
@@ -132,9 +128,14 @@ app.post('/api/verify-slip', upload.single('slip'), async (req, res) => {
     }
 });
 
-// 📌 API 7: หน้าสำหรับพี่ (แอดมิน) เข้ามานั่งเช็กข้อมูลดูว่าตอนนี้ใครมีเงินเท่าไหร่ (รหัสเด้งมาที่นี่)
+// 📌 API 7: หน้าสำหรับแอดมินเช็กข้อมูล
 app.get('/api/admin/dashboard', (req, res) => {
     res.json({ total_users: Object.keys(usersData).length, users: usersData, current_stock: keyDatabase });
+});
+
+// หน้าแรก (เผื่อเวลากดลิงก์ตรงๆ จะได้รู้ว่าเซิร์ฟเวอร์เปิดใช้งานแล้ว)
+app.get('/', (req, res) => {
+    res.send('THREE TWO EIGHT BACKEND IS FULLY OPERATIONAL!');
 });
 
 const PORT = process.env.PORT || 3000;
